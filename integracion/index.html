@@ -1,0 +1,75 @@
+<!--Inicio del código HTML-->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<!-- llamamos a los archivos CSS y JS -->
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Empresa de ferreteria FERREMAS</title>
+  <script>const link = document.createElement('link');link.rel = 'stylesheet';link.href = `styles.css?ts=${Date.now()}`;document.head.appendChild(link);</script>
+</head>
+<body>
+<!--inicio de la sección de encabezado-->
+  <div class="container">
+    <h1>FERREMAS</h1>
+<!--Comenzamos a crear la sección de navegación-->
+    <div id="inicio de sesion-form">
+      <h2> Login</h2>
+      <input type="text" id="user" placeholder="Usuario" />
+      <input type="password" id="password" placeholder="Contraseña" />
+      <button onclick="login()">Entrar</button>
+      <p id="login-error" class="error"></p>
+    </div>
+<!--creamos la sección de registro-->
+    <div id="app" style="display:none;">
+      <p>Rol: <span id="role-display"></span></p>
+
+      <!--seccion de seleccion de opciones en botones-->
+      <div class="buttons">
+        <button onclick="showProducts()"> Catálogo</button>
+        <button onclick="showProduct()"> Productos en venta</button>
+        <button onclick="getBranches()"> Sucursales</button>
+        <button onclick="showBranch()"> Sucursal</button>
+        <button onclick="showVendors()"> Vendedores</button>
+        <button onclick="showVendor()"> Vendedor</button>
+        <button onclick="showOrderForm()"> Pedidos</button>
+      </div>
+
+      <!-- Catálogo -->
+      <div id="catalog-section" style="display:none;">
+        <h2>Catálogo</h2>
+        <div id="catalog-buttons" class="catalog-buttons"></div>
+        <div id="cards-container"></div>
+      </div>
+
+      <!-- Formulario dinámico -->
+      <div id="form-section" style="display:none;">
+        <h2>Formulario</h2>
+        <div id="form-container"></div>
+      </div>
+
+      <!-- Área de respuesta -->
+      <div id="response-section" style="display:none;">
+        <h2>Respuesta</h2>
+        <pre id="output"></pre>
+      </div>
+      
+    </div>
+<!--Seccion de pago y metodos de pago-->
+    <div id="cart-container" style="display:none; position:absolute; top:100px; right:20px; width:300px; background:#f8f8f8; border:1px solid #ccc; padding:10px; border-radius:8px;">
+      <h3>🛒 Carrito</h3>
+      <div id="cart-items"></div>
+      <p>Total: $<span id="cart-total">0</span> <span id="currency">CLP</span></p>
+      <select id="currency-select">
+        <option value="CLP">CLP</option>
+        <option value="USD">USD</option>
+      </select>
+      <button onclick="pay()">Pagar</button>
+      <p id="pay-status" style="color:green;"></p>
+    </div>
+
+  </div>
+  <script src="https://js.stripe.com/v3/"></script>
+  <script>const ts = new Date().getTime();document.write(`<script src="script.js?ts=${ts}"><\/script>`);</script>
+</body>
+</html>
