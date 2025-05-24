@@ -1,4 +1,4 @@
-# This file is used to install the required packages for the project.
+# En este documento se especifican los reuqrimientos de instalacion para poder ejecutar super bien este proyecto:).
 fastapi>=0.95.0
 uvicorn[standard]>=0.21.0
 httpx>=0.24.0
