@@ -20,8 +20,8 @@ from dotenv import load_dotenv
 
 # Cargamos las variables de entorno
 app = FastAPI(
-    title="API's de I. de Plataformas",
-    description="Todas las API's de I. de Plataformas",
+    title="integracion",
+    description="toda la integracion",
     version="1.0.0",
 )
 
