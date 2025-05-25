@@ -1,7 +1,7 @@
 {
-  "name": "api-plataformas",
+  "name": "integracion",
   "version": "1.0.0",
-  "description": "API's of I. Plataformas",
+  "description": "integracion",
   "license": "ISC",
   "author": "alexabetv",
   "type": "commonjs",
