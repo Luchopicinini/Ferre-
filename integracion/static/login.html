@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FERREMAS - Login</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap');
+
+    body {
+      font-family: 'Montserrat', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #2980b9, #6dd5fa);
+      height: 100vh;
+      margin: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .login-container {
+      background: #fff;
+      padding: 40px 35px 35px 35px;
+      border-radius: 12px;
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.15);
+      width: 350px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .login-container::before {
+      content: '';
+      position: absolute;
+      top: -60px;
+      right: -60px;
+      width: 140px;
+      height: 140px;
+      background: #2980b9;
+      border-radius: 50%;
+      opacity: 0.3;
+      transform: rotate(45deg);
+      z-index: 0;
+    }
+
+    h2 {
+      font-weight: 700;
+      color: #2c3e50;
+      margin-bottom: 25px;
+      z-index: 1;
+      position: relative;
+      font-size: 1.8rem;
+      letter-spacing: 1.5px;
+    }
+
+    input {
+      width: 100%;
+      padding: 12px 15px;
+      margin-bottom: 20px;
+      border-radius: 8px;
+      border: 1.8px solid #ccc;
+      font-size: 1rem;
+      outline-offset: 2px;
+      transition: border-color 0.3s ease;
+      box-sizing: border-box;
+      position: relative;
+      z-index: 1;
+    }
+
+    input:focus {
+      border-color: #2980b9;
+      box-shadow: 0 0 8px rgba(41, 128, 185, 0.5);
+    }
+
+    button {
+      width: 100%;
+      padding: 12px 15px;
+      background: #2980b9;
+      border: none;
+      border-radius: 8px;
+      color: white;
+      font-size: 1.1rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.3s ease;
+      z-index: 1;
+      position: relative;
+      box-shadow: 0 6px 15px rgba(41, 128, 185, 0.5);
+    }
+
+    button:hover {
+      background: #1f6391;
+      box-shadow: 0 8px 20px rgba(31, 99, 145, 0.8);
+    }
+
+    .error {
+      margin-top: 10px;
+      color: #e74c3c;
+      font-weight: 600;
+      font-size: 0.9rem;
+      min-height: 20px;
+      z-index: 1;
+      position: relative;
+    }
+  </style>
+  <script src="/script.js" defer></script>
+</head>
+<body>
+  <div class="login-container" role="main" aria-label="Formulario de ingreso">
+    <h2>Ingreso a FERREMAS</h2>
+    <input type="text" id="usuario" placeholder="Usuario" aria-label="Usuario" autocomplete="username" />
+    <input type="password" id="contrasena" placeholder="Contraseña" aria-label="Contraseña" autocomplete="current-password" />
+    <button onclick="login()" aria-label="Botón para iniciar sesión">Entrar</button>
+    <p id="login-error" class="error" aria-live="polite"></p>
+  </div>
+</body>
+</html>

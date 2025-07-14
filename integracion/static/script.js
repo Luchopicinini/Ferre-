@@ -1,7 +1,7 @@
 // Archivo: script.js
 // Descripción: Script para manejar la autenticación y las operaciones de la API
 let token = null;
-let role = null;
+let rol = null;
 let vendorToken = null;
 let allArticles = [];
 let currentCategory = null;
@@ -18,27 +18,49 @@ const cardsContainerEl  = document.getElementById("cards-container");
 
 // ----------------- LOGIN -----------------
 async function login() {
-  const user = document.getElementById("user").value;
-  const pwd  = document.getElementById("password").value;
-  const err  = document.getElementById("login-error");
-  err.textContent = "";
-// Limpiar error previo
+  const userEl = document.getElementById("usuario");
+  const passEl = document.getElementById("contrasena");
+  const errEl  = document.getElementById("login-error");
+
+  if (!userEl || !passEl || !errEl) return; // No estamos en login.html
+
+  const user = userEl.value.trim();
+  const pwd  = passEl.value.trim();
+  errEl.textContent = "";
+
+  if (!user || !pwd) {
+    errEl.textContent = "Por favor, ingresa usuario y contraseña";
+    return;
+  }
+
   try {
     const res = await fetch("/autenticacion", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ user, password: pwd })
     });
-    if (!res.ok) throw new Error("Credenciales inválidas");
+
+    if (!res.ok) {
+      const errorText = await res.text();
+      throw new Error(errorText || "Credenciales inválidas");
+    }
+
     const data = await res.json();
-    token = data.token;
-    vendorToken = data.vendorToken;
-    role  = data.role[0].toUpperCase() + data.role.slice(1);
-    document.getElementById("role-display").textContent = role;
-    document.getElementById("login-form").style.display = "none";
-    document.getElementById("app").style.display = "block";
+
+    if (!data.token || !data.rol) {
+      throw new Error("Respuesta inválida del servidor");
+    }
+
+    localStorage.setItem("token", data.token);
+    localStorage.setItem("rol", data.rol);
+    if (data.vendorToken) {
+      localStorage.setItem("vendorToken", data.vendorToken);
+    }
+
+    // Redirigir al panel si el login fue exitoso
+    window.location.href = "/panel";
   } catch (e) {
-    err.textContent = e.message;
+    errEl.textContent = e.message;
   }
 }
 
@@ -458,3 +480,23 @@ function showResponse(data) {
   responseSectionEl.style.display = "block";
   outputEl.textContent            = JSON.stringify(data, null, 2);
 }
+
+// ----------------- INICIALIZACIÓN AL CARGAR LA PÁGINA -----------------
+window.onload = () => {
+  // Recuperar token desde el almacenamiento local
+  token = localStorage.getItem("token");
+  rol = localStorage.getItem("rol");
+  vendorToken = localStorage.getItem("vendorToken");
+
+  // Elementos dinámicos cargados tras el DOM
+  const currencySelectEl = document.getElementById("currency-select");
+
+  if (currencySelectEl) {
+    currencySelectEl.addEventListener("change", async (e) => {
+      currentCurrency = e.target.value;
+      await updateCartDisplay();
+    });
+  }
+
+  initStripe();
+};

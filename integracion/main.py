@@ -1,30 +1,20 @@
-# importamos las dependencias y configuraciones necesarias para desarrollar tu API RESTful usando FastAPI, y estás preparando 
-# tu entorno para que el backend tenga las capacidades claves
-
-#Framework principal
-from fastapi import FastAPI, HTTPException, Depends, Header, Query, Path
-#respuestas de la API
-from fastapi.responses import FileResponse, JSONResponse
-#dependencias para manejar CORS
+from fastapi import FastAPI, HTTPException, Depends, Header, Query
+from fastapi.responses import JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 import httpx
-#validaciones de datos
-from pydantic import BaseModel, validator
+from pydantic import BaseModel
 import stripe, os
-#dependencias para manejar archivos estáticos
-from fastapi.staticfiles import StaticFiles
-import json
-#dependencias para cargar variables de entorno
 from dotenv import load_dotenv
 
-# Cargamos las variables de entorno
+from fastapi.staticfiles import StaticFiles
+
 app = FastAPI(
-    title="integracion",
-    description="toda la integracion",
+    title="API FERREMAS DUOC",
+    description="AAAAAAAAA LOCURA A LAS 3 AM",
     version="1.0.0",
 )
 
-# CORS para el frontend
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -32,225 +22,238 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Datos de usuarios hardcodeados
-USERS = [
-    {"user": "javier_thompson", "password": "aONF4d6aNBIxRjlgjBRRzrS", "role": "admin"},
-    {"user": "ignacio_tapia", "password": "f7rWChmQS1JYfThT", "role": "maintainer"},
-    {"user": "stripe_sa", "password": "dzkQqDL9XZH33YDzhmsf", "role": "service_account"},
-    {"user": "Admin", "password": "1234", "role": "admin"},
-]
-
-DB_FILE = "db/productos.json"
-
-# Montar DB
-app.mount("/db", StaticFiles(directory="db"), name="db")
-
 load_dotenv()
 
-# Variables de entorno
-API_BASE = os.getenv('API_BASE')
-FIXED_TOKEN = os.getenv('FIXED_TOKEN')
-VENDOR_ALLOW_TOKEN = os.getenv("VENDOR_ALLOW_TOKEN")
-VENDOR_DENY_TOKEN  = os.getenv("VENDOR_DENY_TOKEN")
-URL = os.getenv("URL")
-stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
+API_URL = os.getenv("API_BASE")
+MAIN_TOKEN = os.getenv("TOKEN_FIJO")
+SELLER_TOKEN_OK = os.getenv("TOKEN_VENDEDOR_PERMITIDO")
+SELLER_TOKEN_BLOCKED = os.getenv("TOKEN_VENDEDOR_DENEGADO")
+FX_TOKEN = os.getenv("TOKEN_FXRATESAPI")
+stripe.api_key = os.getenv("CLAVE_SECRETA_STRIPE")
 
-# Info Productos para Stripe
-class Item(BaseModel):
+# Usuarios permitidos
+usuarios_autorizados = [
+    {"usuario": "javier_thompson", "contrasena": "aONF4d6aNBIxRjlgjBRRzrS", "rol": "admin"},
+    {"usuario": "ignacio_tapia", "contrasena": "f7rWChmQS1JYfThT", "rol": "maintainer"},
+    {"usuario": "stripe_sa", "contrasena": "dzkQqDL9XZH33YDzhmsf", "rol": "service_account"},
+    {"usuario": "Admin", "contrasena": "1234", "rol": "admin"},
+]
+
+app.mount("/db", StaticFiles(directory="db"), name="db")
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+class ProductoPago(BaseModel):
     id: str
-    name: str
-    price: int
-    quantity: int
-    currency: str
+    nombre: str
+    precio: int   # precio en centavos (ej: 1000 = $10.00)
+    cantidad: int
+    moneda: str
 
-    @validator("currency")
-    def valid_currency(cls, v):
-        if v not in ("clp", "usd"):
-            raise ValueError("currency debe ser 'clp' o 'usd'")
-        return v
+class ProductoNuevo(BaseModel):
+    nombre: str
+    descripcion: str
+    precio: int
+    categoria: str
+    stock: int
+    moneda: str
+    
+# --- Autenticación ---
 
-# Endpoint de Stripe
-@app.post("/create-checkout-session", tags=["Stripe"])
-async def createCheckoutSession(items: list[Item]):
-    try:
-        line_items = []
-        for item in items:
-            line_items.append({
-                "price_data": {
-                    "currency": "clp", 
-                    "unit_amount": item.price,
-                    "product_data": {"name": item.name}
-                },
-                "quantity": item.quantity
-            })
-        checkout_session = stripe.checkout.Session.create(
-            payment_method_types=["card"],
-            mode="payment",
-            line_items=line_items,
-            success_url=f"{URL}/success?session_id={{CHECKOUT_SESSION_ID}}",
-            cancel_url=f"{URL}/cancel"
-        )
-        return {"url": checkout_session.url}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-# Verifica el token de autenticación
-def verifyToken(
-    x_authentication: str = Header(None, alias="x-authentication")
-):
-    if x_authentication != FIXED_TOKEN:
+def verificar_token_general(x_authentication: str = Header(None, alias="x-authentication")):
+    if x_authentication != MAIN_TOKEN:
         raise HTTPException(403, "Token inválido")
     return x_authentication
 
-# Verifica el token de empresa externa
-def verifyVendorToken(
-    x_vendor_token: str = Header(None, alias="x-vendor-token")
-):
-    if x_vendor_token != VENDOR_ALLOW_TOKEN:
+def verificar_token_vendedor(x_vendor_token: str = Header(None, alias="x-vendor-token")):
+    if x_vendor_token != SELLER_TOKEN_OK:
         raise HTTPException(403, "No tienes permiso para este recurso")
     return x_vendor_token
 
-# Proxy GET
-async def proxyGet(path: str, token: str):
+async def obtener_desde_api(path: str, token: str):
     headers = {"x-authentication": token}
-    async with httpx.AsyncClient() as client:
-        r = await client.get(f"{API_BASE}{path}", headers=headers)
-        return JSONResponse(status_code=r.status_code, content=r.json())
+    async with httpx.AsyncClient() as cliente:
+        respuesta = await cliente.get(f"{API_URL}{path}", headers=headers)
+        return JSONResponse(status_code=respuesta.status_code, content=respuesta.json())
 
-# Proxy POST
-async def proxyPost(path: str, body: dict, token: str):
+async def enviar_a_api_post(path: str, datos: dict, token: str):
     headers = {"x-authentication": token}
-    async with httpx.AsyncClient() as client:
-        r = await client.post(f"{API_BASE}{path}", json=body, headers=headers)
-        return JSONResponse(status_code=r.status_code, content=r.json())
-    
-# Proxy PUT
-async def proxyPut(path: str, headers: dict):
-    async with httpx.AsyncClient() as client:
-        r = await client.put(f"{API_BASE}{path}", headers=headers)
-        return JSONResponse(status_code=r.status_code, content=r.json())
+    async with httpx.AsyncClient() as cliente:
+        respuesta = await cliente.post(f"{API_URL}{path}", json=datos, headers=headers)
+        return JSONResponse(status_code=respuesta.status_code, content=respuesta.json())
 
-# Endpoint de autenticación
+async def enviar_a_api_put(path: str, headers: dict):
+    async with httpx.AsyncClient() as cliente:
+        respuesta = await cliente.put(f"{API_URL}{path}", headers=headers)
+        return JSONResponse(status_code=respuesta.status_code, content=respuesta.json())
+
 @app.post("/autenticacion", tags=["Auth"])
-async def login(creds: dict):
-    user = creds.get("user")
-    pwd  = creds.get("password")
-    for u in USERS:
-        if u["user"] == user and u["password"] == pwd:
-            vendor_tok = VENDOR_DENY_TOKEN if u["role"] == "service_account" else VENDOR_ALLOW_TOKEN
-            return {"token": FIXED_TOKEN, "role": u["role"], "vendorToken": vendor_tok}
+async def login_usuario(credenciales: dict):
+    usuario = credenciales.get("user")
+    contrasena = credenciales.get("password")
+    for u in usuarios_autorizados:
+        if u["usuario"] == usuario and u["contrasena"] == contrasena:
+            token_vendedor = SELLER_TOKEN_BLOCKED if u["rol"] == "service_account" else SELLER_TOKEN_OK
+            return {
+                "token": MAIN_TOKEN,
+                "rol": u["rol"],
+                "vendorToken": token_vendedor
+            }
     raise HTTPException(status_code=401, detail="Credenciales inválidas")
 
-# Endpoint de Divisas
+# --- Divisas ---
+
 @app.get("/currency", tags=["Divisas"])
-async def get_appnexus_rate(
-    code: str = Query(..., min_length=3, max_length=3, description="Código ISO de la moneda origen (ej. CLP)")
+async def convertir_divisa(
+    moneda_origen: str = Query(..., min_length=3, max_length=3),
+    moneda_destino: str = Query(..., min_length=3, max_length=3)
 ):
-    url = f"https://api.appnexus.com/currency?code={code}&show_rate=true"
+    url_fx = f"https://fxratesapi.com/api/latest?base={moneda_origen.upper()}&symbols={moneda_destino.upper()}&api_key={FX_TOKEN}"
+    async with httpx.AsyncClient() as cliente:
+        respuesta = await cliente.get(url_fx)
+    if respuesta.status_code != 200:
+        raise HTTPException(status_code=502, detail="Error al obtener tasa de cambio FXRatesAPI")
+    datos = respuesta.json()
+    tasa = datos.get("rates", {}).get(moneda_destino.upper())
+    if tasa is None:
+        raise HTTPException(status_code=400, detail="Código de moneda inválido")
+    return {"rate": tasa}
+
+# --- Stripe ---
+
+@app.post("/create-checkout-session", tags=["Stripe"])
+async def crear_sesion_pago(items: list[ProductoPago], x_authentication: str = Header(..., alias="x-authentication")):
+    if x_authentication != MAIN_TOKEN:
+        raise HTTPException(403, "Token inválido")
+
+    # 1. Validar stock y actualizarlo en API base
     async with httpx.AsyncClient() as client:
-        r = await client.get(url)
-    data = r.json()
-    resp = data.get("response", {})
-    if resp.get("status") != "OK":
-        raise HTTPException(status_code=502, detail="Error al consultar tasa AppNexus")
-    rate_per_usd = float(resp["currency"]["rate_per_usd"])
-    return {"rate": 1 / rate_per_usd}
+        for item in items:
+            # Primero obtener info actual para validar stock
+            res_art = await client.get(f"{API_URL}/data/articulos/{item.id}", headers={"x-authentication": x_authentication})
+            if res_art.status_code != 200:
+                raise HTTPException(404, detail=f"Producto {item.nombre} no encontrado")
+            articulo = res_art.json()
 
-# Endpoints productos
-@app.get("/data/articulos", dependencies=[Depends(verifyToken)], tags=["Articulos"])
-async def getArticulos(token: str = Depends(verifyToken)):
-    return await proxyGet("/data/articulos", token)
+            if articulo["stock"] < item.cantidad:
+                raise HTTPException(400, detail=f"Stock insuficiente para {item.nombre}. Disponible: {articulo['stock']}")
 
-@app.get("/data/articulos/{aid}", dependencies=[Depends(verifyToken)], tags=["Articulos"])
-async def getArticulo(aid: str, token: str = Depends(verifyToken)):
-    return await proxyGet(f"/data/articulos/{aid}", token)
+            # Actualizar stock en API base (restar cantidad vendida)
+            res_put = await client.put(
+                f"{API_URL}/data/articulos/venta/{item.id}?cantidad={item.cantidad}",
+                headers={"x-authentication": x_authentication}
+            )
+            if res_put.status_code != 200:
+                raise HTTPException(500, detail=f"Error actualizando stock para {item.nombre}")
 
-# Endpoints sucursales
-@app.get("/data/sucursales", dependencies=[Depends(verifyToken)],tags=["Sucursales"])
-async def getSucursales(token: str = Depends(verifyToken)):
-    return await proxyGet("/data/sucursales", token)
-
-@app.get("/data/sucursales/{sid}", dependencies=[Depends(verifyToken)], tags=["Sucursales"])
-async def getSucursal(sid: str, token: str = Depends(verifyToken)):
-    return await proxyGet(f"/data/sucursales/{sid}", token)
-
-# Endpoints vendedores (se corrigió nombre de función repetida)
-@app.get("/data/vendedores", dependencies=[Depends(verifyToken), Depends(verifyVendorToken)], tags=["Vendedores"])
-async def getVendedores(token: str = Depends(verifyToken)):
-    return await proxyGet(f"/data/vendedores", token)
-
-@app.get("/data/vendedores/{vid}", dependencies=[Depends(verifyToken), Depends(verifyVendorToken)], tags=["Vendedores"])
-async def getVendedor(vid: str, token: str = Depends(verifyToken)):
-    return await proxyGet(f"/data/vendedores/{vid}", token)
-
-# Endpoint de agregado de venta
-@app.put("/data/articulos/venta/{aid}", dependencies=[Depends(verifyToken)], tags=["Ventas"])
-async def postVenta(aid: str, cantidad: int = Query(...), token: str = Depends(verifyToken)):
-    return await proxyPut(f"/data/articulos/venta/{aid}?cantidad={cantidad}", headers={"x-authentication": token})
-
-# Endpoint de venta local
-@app.put("/data/local/articulos/venta/{aid}", tags=["Ventas"])
-async def venta_local(
-    aid: str = Path(..., description="ID del artículo local"),
-    cantidad: int = Query(..., gt=0, description="Cantidad a descontar")
-):
+    # 2. Crear línea de items para Stripe
     try:
-        with open(DB_FILE, "r+", encoding="utf-8") as f:
-            productos = json.load(f)
+        line_items = [{
+            "price_data": {
+                "currency": item.moneda.lower(),
+                "unit_amount": item.precio,
+                "product_data": {"name": item.nombre}
+            },
+            "quantity": item.cantidad
+        } for item in items]
 
-            for prod in productos:
-                if prod.get("id") == aid:
-                    if prod["stock"] < cantidad:
-                        raise HTTPException(400, "Stock insuficiente")
-                    prod["stock"] -= cantidad
-
-                    f.seek(0)
-                    json.dump(productos, f, ensure_ascii=False, indent=2)
-                    f.truncate()
-
-                    return {"message": f"Venta local exitosa. Stock nuevo: {prod['stock']}"}
-
-            raise HTTPException(404, "Artículo local no encontrado")
-
-    except HTTPException:
-        raise
+        sesion_pago = stripe.checkout.Session.create(
+            payment_method_types=["card"],
+            mode="payment",
+            line_items=line_items,
+            success_url="http://127.0.0.1:8000/panel",
+            cancel_url="http://127.0.0.1:8000/panel"
+        )
+        return {"url": sesion_pago.url}
     except Exception as e:
-        print("Error en venta_local:", e)
-        raise HTTPException(500, f"Error interno al procesar venta: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
 
-# Sirve la web estática
+@app.get("/config", tags=["Stripe"])
+async def obtener_clave_publica_stripe():
+    clave_publica = os.getenv("CLAVE_PUBLICA_STRIPE")
+    if not clave_publica:
+        raise HTTPException(status_code=500, detail="Clave pública de Stripe no configurada")
+    return {"publicKey": clave_publica}
+
+# --- Endpoints proxy para API base ---
+
+@app.get("/data/articulos", tags=["Articulos"])
+async def listar_articulos(token: str = Depends(verificar_token_general)):
+    return await obtener_desde_api("/data/articulos", token)
+
+@app.get("/data/articulos/{articulo_id}", tags=["Articulos"])
+async def obtener_articulo(articulo_id: str, token: str = Depends(verificar_token_general)):
+    return await obtener_desde_api(f"/data/articulos/{articulo_id}", token)
+
+@app.get("/data/sucursales", tags=["Sucursales"])
+async def listar_sucursales(token: str = Depends(verificar_token_general)):
+    return await obtener_desde_api("/data/sucursales", token)
+
+@app.get("/data/sucursales/{sucursal_id}", tags=["Sucursales"])
+async def obtener_sucursal(sucursal_id: str, token: str = Depends(verificar_token_general)):
+    return await obtener_desde_api(f"/data/sucursales/{sucursal_id}", token)
+
+@app.get("/data/vendedores", tags=["Vendedores"])
+async def listar_vendedores(token: str = Depends(verificar_token_general), vendor_token: str = Depends(verificar_token_vendedor)):
+    return await obtener_desde_api("/data/vendedores", token)
+
+@app.get("/data/vendedores/{vendedor_id}", tags=["Vendedores"])
+async def obtener_vendedor(vendedor_id: str, token: str = Depends(verificar_token_general), vendor_token: str = Depends(verificar_token_vendedor)):
+    return await obtener_desde_api(f"/data/vendedores/{vendedor_id}", token)
+
+@app.put("/data/articulos/venta/{articulo_id}", tags=["Ventas"])
+async def actualizar_venta(articulo_id: str, cantidad: int = Query(...), token: str = Depends(verificar_token_general)):
+    return await enviar_a_api_put(f"/data/articulos/venta/{articulo_id}?cantidad={cantidad}", headers={"x-authentication": token})
+
+@app.post("/data/pedidos/nuevo", tags=["Pedidos"])
+async def crear_pedido(datos_pedido: dict, token: str = Depends(verificar_token_general)):
+    return await enviar_a_api_post("/data/pedidos/nuevo", datos_pedido, token)
+
+@app.get("/data/articulos/novedades", tags=["Articulos"])
+async def listar_novedades(token: str = Depends(verificar_token_general)):
+    return await obtener_desde_api("/data/articulos/novedades", token)
+
+@app.get("/data/articulos/promociones", tags=["Articulos"])
+async def listar_promociones(token: str = Depends(verificar_token_general)):
+    return await obtener_desde_api("/data/articulos/promociones", token)
+
+@app.post("/data/contacto/vendedor", tags=["Contacto"])
+async def contacto_vendedor(mensaje: dict, token: str = Depends(verificar_token_general)):
+    return await enviar_a_api_post("/data/contacto/vendedor", mensaje, token)
+
+@app.get("/data/vendedores/porSucursal", tags=["Vendedores"])
+async def listar_vendedores_por_sucursal(
+    sucursal_id: str = Query(..., alias="sucursal_Id"),
+    token: str = Depends(verificar_token_general),
+    vendor_token: str = Depends(verificar_token_vendedor)
+):
+    return await obtener_desde_api(f"/data/vendedores?sucursalId={sucursal_id}", token)
+
+@app.post("/data/articulos", tags=["Articulos"])
+async def agregar_producto(producto: ProductoNuevo, token: str = Depends(verificar_token_general)):
+    return await enviar_a_api_post("/data/articulos", producto.dict(), token)
+
+# --- Servir archivos estáticos y páginas web ---
+
 @app.get("/", tags=["Web"])
-async def HTML():
-    return FileResponse("login.html")  # Cambio aquí para que la raíz sea login
+async def root():
+    return FileResponse("static/login.html")
 
 @app.get("/panel", tags=["Web"])
 async def panel():
-    return FileResponse("index.html")   # Sirve el panel después del login
+    return FileResponse("static/index.html")
 
-# CSS
-@app.get("/styles.css", response_class=FileResponse, tags=["Web"])
-async def CSS():
-    return FileResponse(path="styles.css", media_type="text/css",headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0", "Pragma": "no-cache"})
+@app.get("/styles.css", tags=["Web"])
+async def styles():
+    return FileResponse("static/styles.css", media_type="text/css")
 
-# JS
 @app.get("/script.js", tags=["Web"])
-async def JS():
-    return FileResponse("script.js", media_type="application/javascript",headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0","Pragma": "no-cache"})
+async def script():
+    return FileResponse("static/script.js", media_type="application/javascript")
 
-# Página de éxito
 @app.get("/success", tags=["Web"])
-async def success_page():
-    return FileResponse("success.html", media_type="text/html")
+async def success():
+    return FileResponse("static/success.html")
 
-# Página de cancelación
 @app.get("/cancel", tags=["Web"])
-async def cancel_page():
-    return FileResponse("cancel.html", media_type="text/html")
-
-# Config Stripe
-@app.get("/config", tags=["Stripe"])
-async def getStripePublicKey():
-    public_key = os.getenv("STRIPE_PUBLISHABLE_KEY")
-    if not public_key:
-        raise HTTPException(status_code=500, detail="Clave pública de Stripe no configurada")
-    return {"publicKey": public_key}
+async def cancel():
+    return FileResponse("static/cancel.html")

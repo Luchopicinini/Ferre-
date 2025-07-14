@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>🛠️ FERREMAS - Panel de Administración 🏗️</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="container">
+    <!-- ╔═══════════════════════════════════════╗ -->
+    <!-- ║               HEADER                 ║ -->
+    <!-- ╚═══════════════════════════════════════╝ -->
+    <header>
+      <h1>🛠️ FERREMAS</h1>
+    </header>
+
+    <!-- ╔═══════════════════════════════════════╗ -->
+    <!-- ║               MENÚ PRINCIPAL          ║ -->
+    <!-- ╚═══════════════════════════════════════╝ -->
+    <nav class="menu" aria-label="Menú principal">
+      <button title="Ver catálogo de productos" onclick="showProducts()">📋 Catálogo</button>
+      <button title="Ver sucursales disponibles" onclick="getBranches()">🏢 Sucursales</button>
+      <button title="Ver lista de vendedores" onclick="showVendors()">👷 Vendedores</button>
+      <button title="Ver carrito de compras" onclick="showCart()">🛒 Carrito</button>
+      <button class="logout" title="Cerrar sesión" onclick="logout()">❌ Cerrar sesión</button>
+    </nav>
+
+    <!-- ╔═══════════════════════════════════════╗ -->
+    <!-- ║              FILTROS                  ║ -->
+    <!-- ╚═══════════════════════════════════════╝ -->
+    <div id="product-filter-container" style="display: none;" class="filter-section" aria-label="Filtro de productos">
+      <label for="category-filter"><strong>🔍 Filtrar por categoría:</strong></label>
+      <select id="category-filter" onchange="filterProductsByCategory()" aria-controls="catalog-section"></select>
+    </div>
+
+    <div id="vendor-filter-container" style="display: none;" class="filter-section" aria-label="Filtro de vendedores">
+      <label for="sucursal-filter"><strong>🔍 Filtrar por sucursal:</strong></label>
+      <select id="sucursal-filter" onchange="filterVendorsBySucursal()" aria-controls="response-section"></select>
+    </div>
+
+    <!-- ╔═══════════════════════════════════════╗ -->
+    <!-- ║            SECCIONES DINÁMICAS        ║ -->
+    <!-- ╚═══════════════════════════════════════╝ -->
+    <main>
+      <section id="catalog-section" aria-live="polite" aria-label="Catálogo de productos"></section>
+      <section id="response-section" aria-live="polite" aria-label="Respuesta general"></section>
+      
+      <!-- Carrito oculto inicialmente -->
+      <section id="cart-section" aria-label="Carrito de compras" style="display:none;">
+        <h3>🛒 Carrito de Compras</h3>
+        <label for="currency-select"><strong>Seleccionar moneda:</strong></label>
+        <select id="currency-select" aria-label="Seleccionar moneda">
+          <option value="clp" selected>CLP - Pesos chilenos</option>
+          <option value="usd">USD - Dólares americanos</option>
+        </select>
+        <div id="cart-items"></div>
+        <p id="cart-total" aria-live="polite"></p>
+        <div class="cart-buttons">
+          <button id="btn-clear-cart" title="Vaciar carrito">🗑️ Vaciar Carrito</button>
+          <button id="btn-buy-cart" title="Comprar productos">💳 Comprar</button>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    let allProducts = [];
+    let groupedProducts = {};
+    let allVendors = [];
+    let groupedVendors = {};
+    let mapaSucursales = {};
+    let carrito = {};
+
+    // Variables para manejar moneda y tasa
+    let monedaSeleccionada = 'clp';
+    let tasaCambio = 1; // Por defecto 1 para CLP->CLP
+
+    // Elementos DOM
+    const currencySelect = document.getElementById('currency-select');
+    const buttons = document.querySelectorAll('.menu button');
+
+    window.addEventListener('load', () => {
+      const role = (localStorage.getItem('rol') || 'invitado').toLowerCase();
+
+      // Lógica roles
+      if (role === 'maintainer') {
+        document.querySelector('button[onclick="showVendors()"]').style.display = 'none';
+      } else if (role === 'service_account') {
+        buttons.forEach(btn => {
+          if (!btn.textContent.toLowerCase().includes('catálogo')) btn.style.display = 'none';
+        });
+      } else if (role !== 'admin') {
+        alert("Rol no autorizado");
+        logout();
+      }
+
+      // Recuperar carrito
+      const savedCart = localStorage.getItem('ferremas_carrito');
+      if (savedCart) {
+        try {
+          carrito = JSON.parse(savedCart);
+        } catch {
+          carrito = {};
+        }
+      }
+
+      // Inicializar tasa
+      actualizarTasaCambio().then(() => showProducts());
+    });
+
+    function logout() {
+      localStorage.clear();
+      window.location.href = '/';
+    }
+
+    function hideAllSections() {
+      document.querySelectorAll('section').forEach(s => s.style.display = 'none');
+    }
+    function toggleFilters({ products = false, vendors = false } = {}) {
+      document.getElementById('product-filter-container').style.display = products ? 'block' : 'none';
+      document.getElementById('vendor-filter-container').style.display = vendors ? 'block' : 'none';
+    }
+
+    // --- CARRITO ---
+    function saveCart() {
+      localStorage.setItem('ferremas_carrito', JSON.stringify(carrito));
+    }
+
+    function addToCart(producto) {
+      if (carrito[producto.id]) {
+        if (carrito[producto.id].cantidad < producto.stock) {
+          carrito[producto.id].cantidad++;
+        } else {
+          alert('No hay más stock disponible para este producto.');
+          return;
+        }
+      } else {
+        carrito[producto.id] = { producto, cantidad: 1 };
+      }
+      saveCart();
+      alert(`Se agregó "${producto.nombre}" al carrito.`);
+    }
+
+    function showCart() {
+      hideAllSections();
+      toggleFilters({ products: false, vendors: false });
+
+      const cartSection = document.getElementById('cart-section');
+      const cartItemsDiv = document.getElementById('cart-items');
+      const cartTotalDiv = document.getElementById('cart-total');
+
+      cartSection.style.display = 'block';
+
+      const productosCarrito = Object.values(carrito);
+      if (productosCarrito.length === 0) {
+        cartItemsDiv.innerHTML = '<p>Tu carrito está vacío.</p>';
+        cartTotalDiv.textContent = '';
+        return;
+      }
+
+      let html = '';
+      productosCarrito.forEach(({ producto, cantidad }) => {
+        const precioConvertido = monedaSeleccionada === 'clp'
+          ? producto.precio
+          : Math.round(producto.precio * tasaCambio);
+        const subtotal = precioConvertido * cantidad;
+
+        html += `
+          <div class="cart-item">
+            <p><strong>${producto.nombre}</strong></p>
+            <p>Precio unitario: ${precioConvertido.toLocaleString()} ${monedaSeleccionada.toUpperCase()}</p>
+            <div class="qty-controls">
+              <button onclick="decreaseQty('${producto.id}')">-</button>
+              <p>${cantidad}</p>
+              <button onclick="increaseQty('${producto.id}')">+</button>
+            </div>
+            <p>Subtotal: ${subtotal.toLocaleString()} ${monedaSeleccionada.toUpperCase()}</p>
+            <button onclick="removeFromCart('${producto.id}')" title="Eliminar producto">×</button>
+          </div>
+        `;
+      });
+
+      cartItemsDiv.innerHTML = html;
+
+      const total = productosCarrito.reduce((acc, { producto, cantidad }) => {
+        const precioUnitario = monedaSeleccionada === 'clp'
+          ? producto.precio
+          : Math.round(producto.precio * tasaCambio);
+        return acc + precioUnitario * cantidad;
+      }, 0);
+      cartTotalDiv.textContent = `Total: ${total.toLocaleString()} ${monedaSeleccionada.toUpperCase()}`;
+    }
+
+    function increaseQty(id) {
+      if (!carrito[id]) return;
+      if (carrito[id].cantidad < carrito[id].producto.stock) {
+        carrito[id].cantidad++;
+        saveCart();
+        showCart();
+      } else {
+        alert('No hay más stock disponible para este producto.');
+      }
+    }
+
+    function decreaseQty(id) {
+      if (!carrito[id]) return;
+      if (carrito[id].cantidad > 1) {
+        carrito[id].cantidad--;
+      } else {
+        delete carrito[id];
+      }
+      saveCart();
+      showCart();
+    }
+
+    function removeFromCart(id) {
+      if (!carrito[id]) return;
+      delete carrito[id];
+      saveCart();
+      showCart();
+    }
+
+    function clearCart() {
+      if (confirm('¿Estás seguro que deseas vaciar el carrito?')) {
+        carrito = {};
+        saveCart();
+        showCart();
+      }
+    }
+    document.getElementById('btn-clear-cart').addEventListener('click', clearCart);
+
+    // Actualizar tasa de cambio al cambiar moneda
+    currencySelect.addEventListener('change', async () => {
+      monedaSeleccionada = currencySelect.value;
+      await actualizarTasaCambio();
+      showCart();
+    });
+
+    async function actualizarTasaCambio() {
+      if (monedaSeleccionada === 'clp') {
+        tasaCambio = 1;
+        return;
+      }
+      try {
+        if (monedaSeleccionada === 'usd') {
+          // Tasa fija USD->CLP
+          const tasaUSD_CLP = 950; // valor fijo, actualizar manualmente si cambia
+          // Para convertir CLP -> USD, dividimos:
+          tasaCambio = 1 / tasaUSD_CLP; // ~0.00105
+        } else {
+          // Si quieres agregar más monedas, acá puedes extender
+          tasaCambio = 1; // fallback
+        }
+      } catch (error) {
+        alert(`Error al actualizar la tasa de cambio: ${error.message}`);
+        tasaCambio = 1;
+        monedaSeleccionada = 'clp';
+        currencySelect.value = 'clp';
+      }
+    }
+
+    // Compra con Stripe
+    document.getElementById('btn-buy-cart').addEventListener('click', async () => {
+      if (Object.keys(carrito).length === 0) {
+        alert('El carrito está vacío.');
+        return;
+      }
+
+      // Preparar items para Stripe
+      const items = Object.values(carrito).map(({ producto, cantidad }) => {
+        let precioStripe;
+        if (monedaSeleccionada === 'usd') {
+          // Convertir a centavos USD para Stripe (entero)
+          precioStripe = Math.round(producto.precio * tasaCambio * 100);
+        } else {
+          // CLP directo (asumiendo que tu backend/Stripe config está en pesos)
+          precioStripe = producto.precio;
+        }
+        return {
+          id: producto.id,
+          nombre: producto.nombre,
+          precio: precioStripe,
+          cantidad,
+          moneda: monedaSeleccionada
+        };
+      });
+
+      // Validar total mínimo para Stripe (0.50 USD = 50 centavos)
+      const totalStripe = items.reduce((acc, item) => acc + item.precio * item.cantidad, 0);
+      if (monedaSeleccionada === 'usd' && totalStripe < 50) {
+        alert('El total mínimo para pagos en USD es de 50 centavos (0.50 USD). Agrega más productos.');
+        return;
+      }
+
+      try {
+        const token = localStorage.getItem('token');
+        const res = await fetch('/create-checkout-session', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-authentication': token
+          },
+          body: JSON.stringify(items)
+        });
+
+        if (!res.ok) {
+          const errorData = await res.json();
+          throw new Error(errorData.detail || 'Error al crear la sesión de pago.');
+        }
+
+        const data = await res.json();
+
+        // Redirigir a la URL de pago de Stripe
+        window.location.href = data.url;
+      } catch (error) {
+        alert(`Error al procesar el pago: ${error.message}`);
+      }
+    });
+
+    // --- PRODUCTOS ---
+    async function showProducts() {
+      hideAllSections();
+      toggleFilters({ products: true, vendors: false });
+
+      const section = document.getElementById('catalog-section');
+      section.innerHTML = '<p>Cargando productos...</p>';
+      section.style.display = 'block';
+
+      try {
+        const token = localStorage.getItem('token');
+        const res = await fetch('/data/articulos', {
+          headers: { 'x-authentication': token }
+        });
+
+        if (!res.ok) throw new Error(await res.text());
+        allProducts = await res.json();
+
+        groupedProducts = allProducts.reduce((acc, p) => {
+          if (!acc[p.categoria]) acc[p.categoria] = [];
+          acc[p.categoria].push(p);
+          return acc;
+        }, {});
+
+        const categorySelect = document.getElementById('category-filter');
+        categorySelect.innerHTML = `<option value="*">Todas las categorías</option>`;
+        Object.keys(groupedProducts).sort().forEach(cat => {
+          categorySelect.innerHTML += `<option value="${cat}">${cat}</option>`;
+        });
+
+        renderGroupedProducts(groupedProducts);
+      } catch (err) {
+        section.innerHTML = `<p>❌ Error: ${err.message}</p>`;
+      }
+    }
+
+    function renderGroupedProducts(grouped) {
+      const section = document.getElementById('catalog-section');
+      let html = '';
+
+      for (const categoria of Object.keys(grouped).sort()) {
+        html += `<div class="category-group"><h3>${categoria}</h3><div class="products-container">`;
+        grouped[categoria].forEach(p => {
+          // Aquí también convertir precio para mostrarlo si no es CLP
+          const precioMostrar = monedaSeleccionada === 'clp' ? p.precio : Math.round(p.precio * tasaCambio);
+          const simboloMoneda = monedaSeleccionada.toUpperCase();
+
+          html += `
+            <div class="product-card">
+              <h4>${p.nombre}</h4>
+              <p><strong>Marca:</strong> ${p.marca || 'Sin marca'}</p>
+              <p class="product-price">${simboloMoneda === 'CLP' ? '$' : simboloMoneda + ' '}${precioMostrar.toLocaleString()}</p>
+              <p class="stock">Stock: ${p.stock}</p>
+              <button class="btn-add-cart" onclick='addToCart(${JSON.stringify(p).replace(/'/g,"\\'")})' ${p.stock < 1 ? "disabled" : ""}>
+                ${p.stock < 1 ? "Agotado" : "Agregar al carrito"}
+              </button>
+            </div>
+          `;
+        });
+        html += '</div></div>';
+      }
+      section.innerHTML = html;
+    }
+
+    function filterProductsByCategory() {
+      const selected = document.getElementById('category-filter').value;
+      if (selected === '*') {
+        renderGroupedProducts(groupedProducts);
+      } else {
+        const filtered = {};
+        if (groupedProducts[selected]) filtered[selected] = groupedProducts[selected];
+        renderGroupedProducts(filtered);
+      }
+    }
+
+    // --- SUCURSALES ---
+    async function getBranches() {
+      hideAllSections();
+      toggleFilters({ products: false, vendors: false });
+      const section = document.getElementById('response-section');
+      section.innerHTML = '<p>Cargando sucursales...</p>';
+      section.style.display = 'block';
+
+      try {
+        const token = localStorage.getItem('token');
+        const res = await fetch('/data/sucursales', {
+          headers: { 'x-authentication': token }
+        });
+
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+
+        let html = '<div class="card-grid">';
+        data.forEach(s => {
+          html += `
+            <div class="card">
+              <h4>${s.localidad}</h4>
+              <p><strong>ID:</strong> ${s.id}</p>
+            </div>
+          `;
+        });
+        html += '</div>';
+        section.innerHTML = html;
+      } catch (err) {
+        section.innerHTML = `<p>❌ Error: ${err.message}</p>`;
+      }
+    }
+
+    // --- VENDEDORES ---
+    async function showVendors() {
+      hideAllSections();
+      toggleFilters({ products: false, vendors: true });
+
+      const section = document.getElementById('response-section');
+      section.innerHTML = '<p>Cargando vendedores...</p>';
+      section.style.display = 'block';
+
+      try {
+        const token = localStorage.getItem('token');
+        const vendorToken = localStorage.getItem('vendorToken');
+
+        // Obtener sucursales
+        const resSuc = await fetch('/data/sucursales', {
+          headers: { 'x-authentication': token }
+        });
+        if (!resSuc.ok) throw new Error('Error al cargar sucursales');
+        const sucursales = await resSuc.json();
+
+        mapaSucursales = {};
+        sucursales.forEach(s => {
+          mapaSucursales[s.id] = s.localidad;
+        });
+
+        // Obtener vendedores
+        const res = await fetch('/data/vendedores', {
+          headers: {
+            'x-authentication': token,
+            'x-vendor-token': vendorToken
+          }
+        });
+        if (!res.ok) throw new Error(await res.text());
+        allVendors = await res.json();
+
+        groupedVendors = {};
+        allVendors.forEach(v => {
+          if (!groupedVendors[v.sucursal]) groupedVendors[v.sucursal] = [];
+          groupedVendors[v.sucursal].push(v);
+        });
+
+        const sucursalSelect = document.getElementById('sucursal-filter');
+        sucursalSelect.innerHTML = `<option value="*">Todas las sucursales</option>`;
+        Object.keys(groupedVendors).sort().forEach(suc => {
+          const nombre = mapaSucursales[suc] ? mapaSucursales[suc].toUpperCase() : '';
+          sucursalSelect.innerHTML += `<option value="${suc}">${suc} ${nombre}</option>`;
+        });
+
+        renderGroupedVendors(groupedVendors);
+      } catch (err) {
+        section.innerHTML = `<p>❌ Error: ${err.message}</p>`;
+      }
+    }
+
+    function renderGroupedVendors(grouped) {
+      const section = document.getElementById('response-section');
+      let html = '';
+
+      const keys = Object.keys(grouped).sort();
+      if (keys.length === 0) {
+        html = '<p>No hay vendedores para mostrar.</p>';
+      } else {
+        keys.forEach(sucId => {
+          const sucursalName = mapaSucursales[sucId] || 'Sucursal desconocida';
+          html += `<div class="category-group"><h3>Sucursal ${sucId} - ${sucursalName}</h3><div class="card-grid">`;
+          grouped[sucId].forEach(v => {
+            html += `
+              <div class="card">
+                <h4>${v.nombre}</h4>
+                <p><strong>ID:</strong> ${v.id}</p>
+                <p><strong>Email:</strong> ${v.email}</p>
+              </div>
+            `;
+          });
+          html += '</div></div>';
+        });
+      }
+      section.innerHTML = html;
+    }
+
+    function filterVendorsBySucursal() {
+      const selected = document.getElementById('sucursal-filter').value;
+      if (selected === '*') {
+        renderGroupedVendors(groupedVendors);
+      } else {
+        const filtered = {};
+        if (groupedVendors[selected]) filtered[selected] = groupedVendors[selected];
+        renderGroupedVendors(filtered);
+      }
+    }
+  </script>
+</body>
+</html>
