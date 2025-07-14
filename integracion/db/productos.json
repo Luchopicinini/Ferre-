@@ -42,5 +42,17 @@
     "desc": 10,
     "new": "True",
     "precio": 990
+  },
+  {
+    "subcategoria": "Lapiceria",
+    "marca": "Faber Castel",
+    "categoria": "Herramientas Manuales",
+    "stock": 190,
+    "nombre": "Lapiz pasta azul",
+    "id": "ART126",
+    "desc": 10,
+    "new": "True",
+    "precio": 990
   }
+
 ]

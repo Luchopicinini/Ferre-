@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FERREMAS - Panel de Productos</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      background: #f0f4f8;
+      color: #333;
+    }
+    h1 {
+      text-align: center;
+    }
+    form {
+      background: #fff;
+      padding: 15px;
+      border-radius: 8px;
+      box-shadow: 0 3px 8px rgba(0,0,0,0.1);
+      max-width: 500px;
+      margin: 0 auto 20px auto;
+    }
+    form input, form select {
+      width: 100%;
+      margin: 8px 0;
+      padding: 8px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+      box-sizing: border-box;
+    }
+    form button {
+      background: #2980b9;
+      color: white;
+      padding: 10px 15px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-weight: bold;
+      width: 100%;
+    }
+    form button:hover {
+      background: #1f5d8a;
+    }
+    table {
+      width: 90%;
+      max-width: 900px;
+      margin: 0 auto;
+      border-collapse: collapse;
+      background: white;
+      box-shadow: 0 3px 8px rgba(0,0,0,0.1);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    th, td {
+      padding: 10px 15px;
+      border-bottom: 1px solid #ddd;
+      text-align: left;
+    }
+    th {
+      background: #2980b9;
+      color: white;
+    }
+    tr:hover {
+      background: #f5faff;
+    }
+    button.edit, button.delete {
+      padding: 5px 10px;
+      margin-right: 5px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    button.edit {
+      background: #3498db;
+      color: white;
+    }
+    button.delete {
+      background: #e74c3c;
+      color: white;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Panel de Administración de Productos</h1>
+
+  <form id="product-form">
+    <input type="hidden" id="product-id" />
+    <label>Nombre:</label>
+    <input type="text" id="product-name" required />
+
+    <label>Categoría:</label>
+    <input type="text" id="product-category" />
+
+    <label>Subcategoría:</label>
+    <input type="text" id="product-subcategory" />
+
+    <label>Marca:</label>
+    <input type="text" id="product-brand" />
+
+    <label>Stock:</label>
+    <input type="number" id="product-stock" min="0" required />
+
+    <label>Precio:</label>
+    <input type="number" id="product-price" min="0" step="0.01" required />
+
+    <label>Descripción (desc):</label>
+    <input type="text" id="product-desc" />
+
+    <label>Nuevo (True/False):</label>
+    <select id="product-new">
+      <option value="True">True</option>
+      <option value="False">False</option>
+    </select>
+
+    <button type="submit">Agregar Producto</button>
+  </form>
+
+  <table id="products-table">
+    <thead>
+      <tr>
+        <th>Nombre</th>
+        <th>Categoría</th>
+        <th>Subcategoría</th>
+        <th>Marca</th>
+        <th>Stock</th>
+        <th>Precio</th>
+        <th>Nuevo</th>
+        <th>Acciones</th>
+      </tr>
+    </thead>
+    <tbody>
+      <!-- Aquí van los productos -->
+    </tbody>
+  </table>
+
+  <script>
+    let products = []; // Aquí almacenamos los productos en memoria
+    const form = document.getElementById('product-form');
+    const tableBody = document.querySelector('#products-table tbody');
+    const productIdInput = document.getElementById('product-id');
+
+    // Función para renderizar la tabla
+    function renderProducts() {
+      tableBody.innerHTML = '';
+      products.forEach((p, index) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${p.nombre}</td>
+          <td>${p.categoria || ''}</td>
+          <td>${p.subcategoria || ''}</td>
+          <td>${p.marca || ''}</td>
+          <td>${p.stock}</td>
+          <td>$${Number(p.precio).toLocaleString()}</td>
+          <td>${p.new}</td>
+          <td>
+            <button class="edit" onclick="editProduct(${index})">Editar</button>
+            <button class="delete" onclick="deleteProduct(${index})">Eliminar</button>
+          </td>
+        `;
+        tableBody.appendChild(tr);
+      });
+    }
+
+    // Agregar o actualizar producto
+    form.addEventListener('submit', e => {
+      e.preventDefault();
+      const id = productIdInput.value;
+      const newProduct = {
+        nombre: document.getElementById('product-name').value.trim(),
+        categoria: document.getElementById('product-category').value.trim(),
+        subcategoria: document.getElementById('product-subcategory').value.trim(),
+        marca: document.getElementById('product-brand').value.trim(),
+        stock: Number(document.getElementById('product-stock').value),
+        precio: Number(document.getElementById('product-price').value),
+        desc: document.getElementById('product-desc').value.trim(),
+        new: document.getElementById('product-new').value,
+      };
+
+      if (id === '') {
+        // Nuevo producto
+        products.push(newProduct);
+      } else {
+        // Actualizar existente
+        products[id] = newProduct;
+      }
+
+      form.reset();
+      productIdInput.value = '';
+      form.querySelector('button[type="submit"]').textContent = 'Agregar Producto';
+      renderProducts();
+    });
+
+    // Editar producto
+    function editProduct(index) {
+      const p = products[index];
+      productIdInput.value = index;
+      document.getElementById('product-name').value = p.nombre;
+      document.getElementById('product-category').value = p.categoria || '';
+      document.getElementById('product-subcategory').value = p.subcategoria || '';
+      document.getElementById('product-brand').value = p.marca || '';
+      document.getElementById('product-stock').value = p.stock;
+      document.getElementById('product-price').value = p.precio;
+      document.getElementById('product-desc').value = p.desc || '';
+      document.getElementById('product-new').value = p.new;
+
+      form.querySelector('button[type="submit"]').textContent = 'Actualizar Producto';
+      window.scrollTo({top: 0, behavior: 'smooth'});
+    }
+
+    // Eliminar producto
+    function deleteProduct(index) {
+      if (confirm(`¿Eliminar el producto "${products[index].nombre}"?`)) {
+        products.splice(index, 1);
+        renderProducts();
+      }
+    }
+
+    // Inicializamos con algunos productos de ejemplo si quieres
+    products = [
+      {
+        nombre: "Pala",
+        categoria: "Herramientas Manuales",
+        subcategoria: "Herramientas De Campo",
+        marca: "CAT",
+        stock: 88,
+        precio: 12990,
+        desc: "Pala para jardinería",
+        new: "True"
+      },
+      {
+        nombre: "Pegamento",
+        categoria: "Herramientas Manuales",
+        subcategoria: "Adesivos",
+        marca: "Easy",
+        stock: 190,
+        precio: 1980,
+        desc: "Pegamento fuerte",
+        new: "True"
+      }
+    ];
+
+    renderProducts();
+  </script>
+</body>
+</html>
